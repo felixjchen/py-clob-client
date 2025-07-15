@@ -5,6 +5,7 @@ description = "Python client for the Polymarket CLOB"
 authors     = ["Felix"]
 
 [tool.poetry.dependencies]
+python = ">=3.9.10,<4.0"
 black = "24.4.2"
 eth-utils = "4.1.1"
 poly_eip712_structs = "0.0.1"
