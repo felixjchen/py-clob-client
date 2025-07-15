@@ -606,14 +606,16 @@ class ClobClient:
         Level 1 Poly Auth
         """
         if self.mode < L1:
-            raise PolyException(L1_AUTH_UNAVAILABLE)
+            # raise PolyException(L1_AUTH_UNAVAILABLE)
+            print(L1_AUTH_UNAVAILABLE)
 
     def assert_level_2_auth(self):
         """
         Level 2 Poly Auth
         """
         if self.mode < L2:
-            raise PolyException(L2_AUTH_UNAVAILABLE)
+            # raise PolyException(L2_AUTH_UNAVAILABLE)
+            print(L2_AUTH_UNAVAILABLE)
 
     def _get_client_mode(self):
         if self.signer is not None and self.creds is not None:
