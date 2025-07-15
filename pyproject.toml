@@ -6,4 +6,4 @@ pytest = "8.2.2"
 python-dotenv = "0.19.2"
 requests = "2.32.3"
 websockets = "12.0"
-py-order-utils = { git = "https://github.com/felixjchen/python-order-utils.git", rev = "21613870c2f67930fff4ac942dc1aa1ed538830e" }
+py_order_utils = { git = "https://github.com/felixjchen/python-order-utils.git", rev = "21613870c2f67930fff4ac942dc1aa1ed538830e" }
