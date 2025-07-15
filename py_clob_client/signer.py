@@ -18,5 +18,5 @@ class Signer:
         """
         Signs a message hash
         """
-        # return Account._sign_hash(message_hash, self.private_key).signature.hex()
-        pass
+        print("py-clob-client was called, it shouldn't be used directly.")
+
