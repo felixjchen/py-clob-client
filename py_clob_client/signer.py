@@ -1,4 +1,3 @@
-from eth_account import Account
 
 
 class Signer:
@@ -6,7 +5,7 @@ class Signer:
         assert private_key is not None and chain_id is not None
 
         self.private_key = private_key
-        self.account = Account.from_key(private_key)
+        # self.account = Account.from_key(private_key)
         self.chain_id = chain_id
 
     def address(self):
@@ -19,4 +18,5 @@ class Signer:
         """
         Signs a message hash
         """
-        return Account._sign_hash(message_hash, self.private_key).signature.hex()
+        # return Account._sign_hash(message_hash, self.private_key).signature.hex()
+        pass
