@@ -11,5 +11,5 @@ poly_eip712_structs = "0.0.1"
 pytest = "8.2.2"
 python-dotenv = "0.19.2"
 requests = "^2.29.0"
-websockets = "^9"
+websockets = ">=10"
 py_order_utils = { git = "https://github.com/felixjchen/py-order-utils.git", rev = "21613870c2f67930fff4ac942dc1aa1ed538830e" }
