@@ -5,4 +5,4 @@ pytest==8.2.2
 python-dotenv==0.19.2
 requests==2.32.3
 websockets==12.0
-git+https://github.com/felixjchen/python-order-utils.git@2f173a32ab3c4c7fcb1ac49f7412cbe6192ee449#egg=python-order-utils
+git+https://github.com/felixjchen/python-order-utils.git@21613870c2f67930fff4ac942dc1aa1ed538830e#egg=py-order-utils

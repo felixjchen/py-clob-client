@@ -17,7 +17,7 @@ setuptools.setup(
     install_requires=[
         "eth-utils>=4.1.1",
         "poly_eip712_structs>=0.0.1",
-        "py-order-utils @ https://github.com/felixjchen/python-order-utils.git@2f173a32ab3c4c7fcb1ac49f7412cbe6192ee449",
+        "py-order-utils @ https://github.com/felixjchen/python-order-utils.git@21613870c2f67930fff4ac942dc1aa1ed538830e",
         "python-dotenv",
         "requests",
     ],
