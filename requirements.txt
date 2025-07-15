@@ -1,8 +1,8 @@
 black==24.4.2
 eth-utils===4.1.1
 poly_eip712_structs==0.0.1
-py_order_utils==0.3.2
 pytest==8.2.2
 python-dotenv==0.19.2
 requests==2.32.3
 websockets==12.0
+git+https://github.com/felixjchen/python-order-utils.git@2f173a32ab3c4c7fcb1ac49f7412cbe6192ee449#egg=python-order-utils
