@@ -28,12 +28,12 @@ from typing import Callable
 
 class Signer:
     def __init__(self, address: str, chain_id: int, sign_callback: Callable):
-        self.address = address
+        self._address = address
         self.chain_id = chain_id
         self.sign_callback = sign_callback
 
     def address(self):
-        self.address
+        self._address
 
     def get_chain_id(self):
         return self.chain_id
