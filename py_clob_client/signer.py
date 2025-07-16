@@ -33,7 +33,7 @@ class Signer:
         self.sign_callback = sign_callback
 
     def address(self):
-        self._address
+        return self._address
 
     def get_chain_id(self):
         return self.chain_id
