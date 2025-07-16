@@ -9,7 +9,8 @@ class Signer:
         self.chain_id = chain_id
 
     def address(self):
-        return self.account.address
+        # return self.account.address
+        return "0x0000000000000000000000000000000000000000"
 
     def get_chain_id(self):
         return self.chain_id
