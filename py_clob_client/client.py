@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Callable, Optional
 
 from .order_builder.builder import OrderBuilder
 from .headers.headers import create_level_1_headers, create_level_2_headers
@@ -97,6 +97,8 @@ class ClobClient:
         creds: ApiCreds = None,
         signature_type: int = None,
         funder: str = None,
+        address_override: str = None, # These are for Turnkey
+        sign_callback_override: Optional[Callable] = None, # These are for Turnkey
     ):
         """
         Initializes the clob client
@@ -112,7 +114,7 @@ class ClobClient:
         """
         self.host = host[0:-1] if host.endswith("/") else host
         self.chain_id = chain_id
-        self.signer = Signer(key, chain_id) if key else None
+        self.signer = Signer(address_override, chain_id, sign_callback_override) if key else None
         self.creds = creds
         self.mode = self._get_client_mode()
 
