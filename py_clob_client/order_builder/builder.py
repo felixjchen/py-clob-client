@@ -150,7 +150,7 @@ class OrderBuilder:
         order_builder = UtilsOrderBuilder(
             contract_config.exchange,
             self.signer.get_chain_id(),
-            UtilsSigner(key=self.signer.private_key),
+            self.signer,
         )
 
         return order_builder.build_signed_order(data)
@@ -189,7 +189,7 @@ class OrderBuilder:
         order_builder = UtilsOrderBuilder(
             contract_config.exchange,
             self.signer.get_chain_id(),
-            UtilsSigner(key=self.signer.private_key),
+            self.signer,
         )
 
         return order_builder.build_signed_order(data)
