@@ -27,10 +27,10 @@ from typing import Callable
 
 
 class Signer:
-    def __init__(self, address: str, chain_id: int, sign_callback: Callable):
+    def __init__(self, address: str, chain_id: int, async_sign_callback: Callable):
         self._address = address
         self.chain_id = chain_id
-        self.sign_callback = sign_callback
+        self.async_sign_callback = async_sign_callback
 
     def address(self):
         return self._address
@@ -38,9 +38,9 @@ class Signer:
     def get_chain_id(self):
         return self.chain_id
 
-    def sign(self, message_hash):
+    async def sign(self, message_hash):
         """
         Signs a message hash
         """
-        return self.sign_callback(message_hash)
+        return await self.async_sign_callback(message_hash)
 

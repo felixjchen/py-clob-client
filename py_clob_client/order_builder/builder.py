@@ -116,7 +116,7 @@ class OrderBuilder:
         else:
             raise ValueError(f"order_args.side must be '{BUY}' or '{SELL}'")
 
-    def create_order(
+    async def create_order(
         self, order_args: OrderArgs, options: CreateOrderOptions
     ) -> SignedOrder:
         """
@@ -153,9 +153,9 @@ class OrderBuilder:
             self.signer,
         )
 
-        return order_builder.build_signed_order(data)
+        return await order_builder.build_signed_order(data)
 
-    def create_market_order(
+    async def create_market_order(
         self, order_args: MarketOrderArgs, options: CreateOrderOptions
     ) -> SignedOrder:
         """
@@ -192,7 +192,7 @@ class OrderBuilder:
             self.signer,
         )
 
-        return order_builder.build_signed_order(data)
+        return await order_builder.build_signed_order(data)
 
     def calculate_buy_market_price(
         self,

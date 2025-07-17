@@ -173,14 +173,14 @@ class ClobClient:
         """
         return get("{}{}".format(self.host, TIME))
 
-    def create_api_key(self, nonce: int = None) -> ApiCreds:
+    async def create_api_key(self, nonce: int = None) -> ApiCreds:
         """
         Creates a new CLOB API key for the given
         """
         self.assert_level_1_auth()
 
         endpoint = "{}{}".format(self.host, CREATE_API_KEY)
-        headers = create_level_1_headers(self.signer, nonce)
+        headers = await create_level_1_headers(self.signer, nonce)
 
         creds_raw = post(endpoint, headers=headers)
         try:
@@ -194,14 +194,14 @@ class ClobClient:
             return None
         return creds
 
-    def derive_api_key(self, nonce: int = None) -> ApiCreds:
+    async def derive_api_key(self, nonce: int = None) -> ApiCreds:
         """
         Derives an already existing CLOB API key for the given address and nonce
         """
         self.assert_level_1_auth()
 
         endpoint = "{}{}".format(self.host, DERIVE_API_KEY)
-        headers = create_level_1_headers(self.signer, nonce)
+        headers = await create_level_1_headers(self.signer, nonce)
 
         creds_raw = get(endpoint, headers=headers)
         try:
@@ -215,14 +215,14 @@ class ClobClient:
             return None
         return creds
 
-    def create_or_derive_api_creds(self, nonce: int = None) -> ApiCreds:
+    async def create_or_derive_api_creds(self, nonce: int = None) -> ApiCreds:
         """
         Creates API creds if not already created for nonce, otherwise derives them
         """
         try:
-            return self.create_api_key(nonce)
+            return await self.create_api_key(nonce)
         except:
-            return self.derive_api_key(nonce)
+            return await self.derive_api_key(nonce)
 
     def set_api_creds(self, creds: ApiCreds):
         """
