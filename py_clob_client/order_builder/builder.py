@@ -91,7 +91,7 @@ class OrderBuilder:
             raw_maker_amt = round_down(amount, round_config.size)
             raw_taker_amt = raw_maker_amt / raw_price
             if decimal_places(raw_taker_amt) > round_config.amount:
-                raw_taker_amt = round_up(raw_taker_amt, round_config.amount + 4)
+                raw_taker_amt = round_up(raw_taker_amt, round_config.amount + 2) # EDITTED
                 if decimal_places(raw_taker_amt) > round_config.amount:
                     raw_taker_amt = round_down(raw_taker_amt, round_config.amount)
 
