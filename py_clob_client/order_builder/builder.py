@@ -89,13 +89,11 @@ class OrderBuilder:
 
         if side == BUY:
             raw_maker_amt = round_down(amount, round_config.size)
-
-
             raw_taker_amt = raw_maker_amt / raw_price
-            if decimal_places(raw_taker_amt) > round_config.amount - 2:
-                raw_taker_amt = round_up(raw_taker_amt, round_config.amount + 2)
-                if decimal_places(raw_taker_amt) > round_config.amount - 2:
-                    raw_taker_amt = round_down(raw_taker_amt, round_config.amount - 2)
+            if decimal_places(raw_taker_amt) > round_config.amount:
+                raw_taker_amt = round_up(raw_taker_amt, round_config.amount + 4)
+                if decimal_places(raw_taker_amt) > round_config.amount:
+                    raw_taker_amt = round_down(raw_taker_amt, round_config.amount)
 
             maker_amount = to_token_decimals(raw_maker_amt)
             taker_amount = to_token_decimals(raw_taker_amt)
