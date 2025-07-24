@@ -39,12 +39,6 @@ def create_level_2_headers(signer: Signer, creds: ApiCreds, request_args: Reques
     """
     timestamp = int(datetime.now().timestamp())
 
-    print(creds.api_secret,
-        timestamp,
-        request_args.method,
-        request_args.request_path,
-        request_args.body)
-
     hmac_sig = build_hmac_signature(
         creds.api_secret,
         timestamp,
