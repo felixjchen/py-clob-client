@@ -1,6 +1,6 @@
 [tool.poetry]
 name        = "py-clob-client-felix"
-version     = "0.23.0"
+version     = "0.23.2"
 description = "Python client for the Polymarket CLOB"
 authors     = ["Felix"]
 packages    = [{include = "py_clob_client"}]
@@ -13,5 +13,5 @@ python-dotenv = "0.19.2"
 requests = "^2.29.0"
 websockets = ">=10"
 py-builder-signing-sdk = "0.0.2"
-httpx = {version = "0.27.0", extras = ["http2"]}
+httpx = {version = ">=0.27.0", extras = ["http2"]}
 py-order-utils-felix = "0.3.2"
