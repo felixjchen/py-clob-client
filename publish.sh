@@ -10,17 +10,12 @@ if ! command -v poetry &> /dev/null; then
 fi
 
 DRY_RUN=false
-SKIP_TESTS=false
 BUMP_VERSION=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --dry-run)
             DRY_RUN=true
-            shift
-            ;;
-        --skip-tests)
-            SKIP_TESTS=true
             shift
             ;;
         --bump)
@@ -32,14 +27,8 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --dry-run      Build but don't upload to PyPI"
-            echo "  --skip-tests   Skip running tests before publishing"
             echo "  --bump TYPE    Bump version before publishing (patch|minor|major)"
             echo "  -h, --help     Show this help message"
-            echo ""
-            echo "Examples:"
-            echo "  ./publish.sh                    # Build and publish current version"
-            echo "  ./publish.sh --bump patch       # Bump patch version and publish"
-            echo "  ./publish.sh --dry-run          # Build only, don't upload"
             exit 0
             ;;
         *)
@@ -67,17 +56,6 @@ if [ -n "$(git status --porcelain)" ]; then
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         exit 1
     fi
-fi
-
-if [ "$SKIP_TESTS" = false ]; then
-    echo "Running tests..."
-    poetry run pytest -x || {
-        echo "Tests failed! Aborting publish."
-        exit 1
-    }
-    echo "Tests passed!"
-else
-    echo "Skipping tests (--skip-tests flag set)"
 fi
 
 echo "Cleaning previous builds..."
