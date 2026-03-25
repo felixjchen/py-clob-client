@@ -4,8 +4,8 @@ from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import ApiCreds, OrderArgs
 from dotenv import load_dotenv
 from py_clob_client.constants import AMOY
-
-from py_clob_client.order_builder.constants import BUY
+from py_clob_client.clob_types import (OrderType)
+from py_clob_client.order_builder.constants import BUY, SELL
 
 
 load_dotenv()
@@ -19,18 +19,16 @@ def main():
         api_secret=os.getenv("CLOB_SECRET"),
         api_passphrase=os.getenv("CLOB_PASS_PHRASE"),
     )
-    chain_id = int(os.getenv("CHAIN_ID", AMOY))
+    chain_id = AMOY
     client = ClobClient(host, key=key, chain_id=chain_id, creds=creds)
-
-    # Create and sign a limit order buying 100 YES tokens for 0.0005 each
     order_args = OrderArgs(
-        price=0.0005,
-        size=20,
+        price=0.4,
+        size=5,
         side=BUY,
-        token_id="71321045679252212594626385532706912750332728571942532289631379312455583992563",
+        token_id="102200530570339469387764365697342150521708074903735836831685780223982723092914",
     )
-    signed_order = client.create_order(order_args)
-    resp = client.post_order(signed_order)
+    order = client.create_order(order_args)
+    resp = client.post_order(order, orderType=OrderType.GTC, post_only=True)
     print(resp)
     print("Done!")
 

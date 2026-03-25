@@ -24,10 +24,16 @@ class ApiCreds:
 
 
 @dataclass
+class ReadonlyApiKeyResponse:
+    api_key: str
+
+
+@dataclass
 class RequestArgs:
     method: str
     request_path: str
     body: Any = None
+    serialized_body: Optional[str] = None
 
 
 @dataclass
@@ -163,6 +169,10 @@ class OrderBookSummary:
     timestamp: str = None
     bids: list[OrderSummary] = None
     asks: list[OrderSummary] = None
+    min_order_size: str = None
+    neg_risk: bool = None
+    tick_size: str = None
+    last_trade_price: str = None
     hash: str = None
 
     @property
@@ -244,3 +254,4 @@ class ContractConfig:
 class PostOrdersArgs:
     order: SignedOrder
     orderType: OrderType = OrderType.GTC
+    postOnly: bool = False

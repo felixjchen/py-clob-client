@@ -1,8 +1,16 @@
 import logging
+import json
+import time
 from typing import Callable, Optional
 
+from py_builder_signing_sdk.config import BuilderConfig
+
 from .order_builder.builder import OrderBuilder
-from .headers.headers import create_level_1_headers, create_level_2_headers
+from .headers.headers import (
+    create_level_1_headers,
+    create_level_2_headers,
+    enrich_l2_headers_with_builder_headers,
+)
 from .signer import Signer
 from .config import get_contract_config
 
@@ -16,6 +24,10 @@ from .endpoints import (
     DERIVE_API_KEY,
     GET_API_KEYS,
     CLOSED_ONLY,
+    CREATE_READONLY_API_KEY,
+    GET_READONLY_API_KEYS,
+    DELETE_READONLY_API_KEY,
+    VALIDATE_READONLY_API_KEY,
     GET_LAST_TRADE_PRICE,
     GET_ORDER,
     GET_ORDER_BOOK,
@@ -33,6 +45,7 @@ from .endpoints import (
     IS_ORDER_SCORING,
     GET_TICK_SIZE,
     GET_NEG_RISK,
+    GET_FEE_RATE,
     ARE_ORDERS_SCORING,
     GET_SIMPLIFIED_MARKETS,
     GET_MARKETS,
@@ -46,9 +59,12 @@ from .endpoints import (
     GET_PRICES,
     GET_SPREAD,
     GET_SPREADS,
+    GET_BUILDER_TRADES,
+    POST_HEARTBEAT,
 )
 from .clob_types import (
     ApiCreds,
+    ReadonlyApiKeyResponse,
     TradeParams,
     OpenOrderParams,
     OrderArgs,
@@ -78,7 +94,15 @@ from .http_helpers.helpers import (
     add_order_scoring_params_to_url,
 )
 
-from .constants import L0, L1, L1_AUTH_UNAVAILABLE, L2, L2_AUTH_UNAVAILABLE, END_CURSOR
+from .constants import (
+    L0,
+    L1,
+    L1_AUTH_UNAVAILABLE,
+    L2,
+    L2_AUTH_UNAVAILABLE,
+    END_CURSOR,
+    BUILDER_AUTH_UNAVAILABLE,
+)
 from .utilities import (
     parse_raw_orderbook_summary,
     generate_orderbook_summary_hash,
@@ -86,6 +110,7 @@ from .utilities import (
     is_tick_size_smaller,
     price_valid,
 )
+from .rfq import RfqClient
 
 
 class ClobClient:
@@ -99,6 +124,8 @@ class ClobClient:
         funder: str = None,
         address_override: str = None, # These are for Turnkey
         sign_callback_override: Optional[Callable] = None, # These are for Turnkey
+        builder_config: BuilderConfig = None,
+        tick_size_ttl: float = 300.0,
     ):
         """
         Initializes the clob client
@@ -123,9 +150,19 @@ class ClobClient:
                 self.signer, sig_type=signature_type, funder=funder
             )
 
+        self.builder_config = None
+        if builder_config:
+            self.builder_config = builder_config
+
         # local cache
         self.__tick_sizes = {}
+        self.__tick_size_timestamps = {}
+        self.__tick_size_ttl = tick_size_ttl
         self.__neg_risk = {}
+        self.__fee_rates = {}
+
+        # RFQ client
+        self.rfq = RfqClient(self)
 
         self.logger = logging.getLogger(self.__class__.__name__)
 
@@ -264,6 +301,67 @@ class ClobClient:
         headers = create_level_2_headers(self.signer, self.creds, request_args)
         return delete("{}{}".format(self.host, DELETE_API_KEY), headers=headers)
 
+    def create_readonly_api_key(self) -> ReadonlyApiKeyResponse:
+        """
+        Creates a new readonly API key for a user
+        Level 2 Auth required
+        """
+        self.assert_level_2_auth()
+
+        request_args = RequestArgs(method="POST", request_path=CREATE_READONLY_API_KEY)
+        headers = create_level_2_headers(self.signer, self.creds, request_args)
+
+        response = post("{}{}".format(self.host, CREATE_READONLY_API_KEY), headers=headers)
+        try:
+            return ReadonlyApiKeyResponse(api_key=response["apiKey"])
+        except:
+            self.logger.error("Couldn't parse readonly API key response")
+            return None
+
+    def get_readonly_api_keys(self) -> list[str]:
+        """
+        Gets the available readonly API keys for this address
+        Level 2 Auth required
+        """
+        self.assert_level_2_auth()
+
+        request_args = RequestArgs(method="GET", request_path=GET_READONLY_API_KEYS)
+        headers = create_level_2_headers(self.signer, self.creds, request_args)
+        return get("{}{}".format(self.host, GET_READONLY_API_KEYS), headers=headers)
+
+    def delete_readonly_api_key(self, key: str) -> bool:
+        """
+        Deletes a readonly API key for a user
+        Level 2 Auth required
+        """
+        self.assert_level_2_auth()
+
+        body = {"key": key}
+        serialized = json.dumps(body, separators=(",", ":"), ensure_ascii=False)
+        request_args = RequestArgs(
+            method="DELETE",
+            request_path=DELETE_READONLY_API_KEY,
+            body=body,
+            serialized_body=serialized,
+        )
+        headers = create_level_2_headers(self.signer, self.creds, request_args)
+        return delete(
+            "{}{}".format(self.host, DELETE_READONLY_API_KEY),
+            headers=headers,
+            data=serialized,
+        )
+
+    def validate_readonly_api_key(self, address: str, key: str) -> str:
+        """
+        Validates a readonly API key for a given address
+        This is a public endpoint, no authentication required
+        """
+        return get(
+            "{}{}?address={}&key={}".format(
+                self.host, VALIDATE_READONLY_API_KEY, address, key
+            )
+        )
+
     def get_midpoint(self, token_id):
         """
         Get the mid market price for the given market
@@ -304,13 +402,43 @@ class ClobClient:
         return post("{}{}".format(self.host, GET_SPREADS), data=body)
 
     def get_tick_size(self, token_id: str) -> TickSize:
-        if token_id in self.__tick_sizes:
+        cached_at = self.__tick_size_timestamps.get(token_id)
+
+        if (
+            token_id in self.__tick_sizes
+            and cached_at is not None
+            and (time.monotonic() - cached_at) < self.__tick_size_ttl
+        ):
             return self.__tick_sizes[token_id]
 
         result = get("{}{}?token_id={}".format(self.host, GET_TICK_SIZE, token_id))
         self.__tick_sizes[token_id] = str(result["minimum_tick_size"])
+        self.__tick_size_timestamps[token_id] = time.monotonic()
 
         return self.__tick_sizes[token_id]
+
+    def clear_tick_size_cache(self, token_id: str = None):
+        """
+        Clears the tick size cache, forcing fresh fetches on the next access.
+
+        Args:
+            token_id: If provided, only clears the cache for this token.
+                      Otherwise clears all cached tick sizes.
+        """
+        if token_id is not None:
+            self.__tick_sizes.pop(token_id, None)
+            self.__tick_size_timestamps.pop(token_id, None)
+        else:
+            self.__tick_sizes.clear()
+            self.__tick_size_timestamps.clear()
+
+    def _update_tick_size_from_order_book(self, book: OrderBookSummary):
+        """
+        Opportunistically updates the tick size cache from an order book response.
+        """
+        if book and book.asset_id and book.tick_size:
+            self.__tick_sizes[book.asset_id] = str(book.tick_size)
+            self.__tick_size_timestamps[book.asset_id] = time.monotonic()
 
     def get_neg_risk(self, token_id: str) -> bool:
         if token_id in self.__neg_risk:
@@ -320,6 +448,16 @@ class ClobClient:
         self.__neg_risk[token_id] = result["neg_risk"]
 
         return result["neg_risk"]
+
+    def get_fee_rate_bps(self, token_id: str) -> int:
+        if token_id in self.__fee_rates:
+            return self.__fee_rates[token_id]
+
+        result = get("{}{}?token_id={}".format(self.host, GET_FEE_RATE, token_id))
+        fee_rate = result.get("base_fee") or 0
+        self.__fee_rates[token_id] = fee_rate
+
+        return fee_rate
 
     def __resolve_tick_size(
         self, token_id: str, tick_size: TickSize = None
@@ -336,6 +474,22 @@ class ClobClient:
         else:
             tick_size = min_tick_size
         return tick_size
+
+    def __resolve_fee_rate(self, token_id: str, user_fee_rate: int = None) -> int:
+        market_fee_rate_bps = self.get_fee_rate_bps(token_id)
+        # If both fee rate on the market and the user supplied fee rate are non-zero, validate that they match
+        # else return the market fee rate
+        if (
+            market_fee_rate_bps is not None
+            and market_fee_rate_bps > 0
+            and user_fee_rate is not None
+            and user_fee_rate > 0
+            and user_fee_rate != market_fee_rate_bps
+        ):
+            raise Exception(
+                f"invalid user provided fee rate: ({user_fee_rate}), fee rate for the market must be {market_fee_rate_bps}"
+            )
+        return market_fee_rate_bps
 
     def create_order(
         self, order_args: OrderArgs, options: Optional[PartialCreateOrderOptions] = None
@@ -367,6 +521,12 @@ class ClobClient:
             if options and options.neg_risk
             else self.get_neg_risk(order_args.token_id)
         )
+
+        # fee rate
+        fee_rate_bps = self.__resolve_fee_rate(
+            order_args.token_id, order_args.fee_rate_bps
+        )
+        order_args.fee_rate_bps = fee_rate_bps
 
         return self.builder.create_order(
             order_args,
@@ -417,6 +577,12 @@ class ClobClient:
             else self.get_neg_risk(order_args.token_id)
         )
 
+        # fee rate
+        fee_rate_bps = self.__resolve_fee_rate(
+            order_args.token_id, order_args.fee_rate_bps
+        )
+        order_args.fee_rate_bps = fee_rate_bps
+
         return self.builder.create_market_order(
             order_args,
             CreateOrderOptions(
@@ -431,27 +597,61 @@ class ClobClient:
         """
         self.assert_level_2_auth()
         body = [
-            order_to_json(arg.order, self.creds.api_key, arg.orderType) for arg in args
+            order_to_json(arg.order, self.creds.api_key, arg.orderType, arg.postOnly) for arg in args
         ]
-        headers = create_level_2_headers(
-            self.signer,
-            self.creds,
-            RequestArgs(method="POST", request_path=POST_ORDERS, body=body),
+        request_args = RequestArgs(
+            method="POST",
+            request_path=POST_ORDERS,
+            body=body,
+            serialized_body=json.dumps(body, separators=(",", ":"), ensure_ascii=False),
         )
-        return post("{}{}".format(self.host, POST_ORDERS), headers=headers, data=body)
+        headers = create_level_2_headers(self.signer, self.creds, request_args)
+        # Builder flow
+        if self.can_builder_auth():
+            builder_headers = self._generate_builder_headers(request_args, headers)
+            if builder_headers is not None:
+                return post(
+                    "{}{}".format(self.host, POST_ORDERS),
+                    headers=builder_headers,
+                    data=request_args.serialized_body,
+                )
+        # send exact serialized bytes
+        return post(
+            "{}{}".format(self.host, POST_ORDERS),
+            headers=headers,
+            data=request_args.serialized_body,
+        )
 
-    def post_order(self, order, orderType: OrderType = OrderType.GTC):
+    def post_order(self, order, orderType: OrderType = OrderType.GTC, post_only: bool = False):
         """
         Posts the order
         """
+        if post_only and (orderType != OrderType.GTC and orderType != OrderType.GTD):
+            raise Exception("post_only orders can only be of type GTC or GTD")
+
         self.assert_level_2_auth()
-        body = order_to_json(order, self.creds.api_key, orderType)
-        headers = create_level_2_headers(
-            self.signer,
-            self.creds,
-            RequestArgs(method="POST", request_path=POST_ORDER, body=body),
+        body = order_to_json(order, self.creds.api_key, orderType, post_only)
+        request_args = RequestArgs(
+            method="POST",
+            request_path=POST_ORDER,
+            body=body,
+            serialized_body=json.dumps(body, separators=(",", ":"), ensure_ascii=False),
         )
-        return post("{}{}".format(self.host, POST_ORDER), headers=headers, data=body)
+        headers = create_level_2_headers(self.signer, self.creds, request_args)
+        # Builder flow
+        if self.can_builder_auth():
+            builder_headers = self._generate_builder_headers(request_args, headers)
+            if builder_headers is not None:
+                return post(
+                    "{}{}".format(self.host, POST_ORDER),
+                    headers=builder_headers,
+                    data=request_args.serialized_body,
+                )
+        return post(
+            "{}{}".format(self.host, POST_ORDER),
+            headers=headers,
+            data=request_args.serialized_body,
+        )
 
     def create_and_post_order(
         self, order_args: OrderArgs, options: PartialCreateOrderOptions = None
@@ -470,9 +670,18 @@ class ClobClient:
         self.assert_level_2_auth()
         body = {"orderID": order_id}
 
-        request_args = RequestArgs(method="DELETE", request_path=CANCEL, body=body)
+        request_args = RequestArgs(
+            method="DELETE",
+            request_path=CANCEL,
+            body=body,
+            serialized_body=json.dumps(body, separators=(",", ":"), ensure_ascii=False),
+        )
         headers = create_level_2_headers(self.signer, self.creds, request_args)
-        return delete("{}{}".format(self.host, CANCEL), headers=headers, data=body)
+        return delete(
+            "{}{}".format(self.host, CANCEL),
+            headers=headers,
+            data=request_args.serialized_body,
+        )
 
     def cancel_orders(self, order_ids):
         """
@@ -481,13 +690,16 @@ class ClobClient:
         """
         self.assert_level_2_auth()
         body = order_ids
-
+        serialized = json.dumps(body, separators=(",", ":"), ensure_ascii=False)
         request_args = RequestArgs(
-            method="DELETE", request_path=CANCEL_ORDERS, body=body
+            method="DELETE",
+            request_path=CANCEL_ORDERS,
+            body=body,
+            serialized_body=serialized,
         )
         headers = create_level_2_headers(self.signer, self.creds, request_args)
         return delete(
-            "{}{}".format(self.host, CANCEL_ORDERS), headers=headers, data=body
+            "{}{}".format(self.host, CANCEL_ORDERS), headers=headers, data=serialized
         )
 
     def cancel_all(self):
@@ -500,6 +712,22 @@ class ClobClient:
         headers = create_level_2_headers(self.signer, self.creds, request_args)
         return delete("{}{}".format(self.host, CANCEL_ALL), headers=headers)
 
+    def post_heartbeat(self, heartbeat_id: Optional[str]):
+        """
+        Sends a heartbeat to the server, if heartbeats are started and one isn't sent within 10s, all orders will be cancelled
+        Requires Level 2 authentication
+        """
+        self.assert_level_2_auth()
+        body = {"heartbeat_id": heartbeat_id}
+        serialized = json.dumps(body, separators=(",", ":"), ensure_ascii=False)
+        request_args = RequestArgs(method="POST", request_path=POST_HEARTBEAT, body=body, serialized_body=serialized)
+        headers = create_level_2_headers(self.signer, self.creds, request_args)
+        return post(
+            "{}{}".format(self.host, POST_HEARTBEAT),
+            headers=headers,
+            data=serialized
+        )
+
     def cancel_market_orders(self, market: str = "", asset_id: str = ""):
         """
         Cancels orders
@@ -507,13 +735,18 @@ class ClobClient:
         """
         self.assert_level_2_auth()
         body = {"market": market, "asset_id": asset_id}
-
+        serialized = json.dumps(body, separators=(",", ":"), ensure_ascii=False)
         request_args = RequestArgs(
-            method="DELETE", request_path=CANCEL_MARKET_ORDERS, body=body
+            method="DELETE",
+            request_path=CANCEL_MARKET_ORDERS,
+            body=body,
+            serialized_body=serialized,
         )
         headers = create_level_2_headers(self.signer, self.creds, request_args)
         return delete(
-            "{}{}".format(self.host, CANCEL_MARKET_ORDERS), headers=headers, data=body
+            "{}{}".format(self.host, CANCEL_MARKET_ORDERS),
+            headers=headers,
+            data=serialized,
         )
 
     def get_orders(self, params: OpenOrderParams = None, next_cursor="MA=="):
@@ -542,7 +775,9 @@ class ClobClient:
         Fetches the orderbook for the token_id
         """
         raw_obs = get("{}{}?token_id={}".format(self.host, GET_ORDER_BOOK, token_id))
-        return parse_raw_orderbook_summary(raw_obs)
+        result = parse_raw_orderbook_summary(raw_obs)
+        self._update_tick_size_from_order_book(result)
+        return result
 
     def get_order_books(self, params: list[BookParams]) -> list[OrderBookSummary]:
         """
@@ -550,7 +785,10 @@ class ClobClient:
         """
         body = [{"token_id": param.token_id} for param in params]
         raw_obs = post("{}{}".format(self.host, GET_ORDER_BOOKS), data=body)
-        return [parse_raw_orderbook_summary(r) for r in raw_obs]
+        results = [parse_raw_orderbook_summary(r) for r in raw_obs]
+        for book in results:
+            self._update_tick_size_from_order_book(book)
+        return results
 
     def get_order_book_hash(self, orderbook: OrderBookSummary) -> str:
         """
@@ -619,12 +857,54 @@ class ClobClient:
             # raise PolyException(L2_AUTH_UNAVAILABLE)
             print(L2_AUTH_UNAVAILABLE)
 
+    def assert_builder_auth(self):
+        """
+        Builder Auth
+        """
+        if not self.can_builder_auth():
+            raise PolyException(BUILDER_AUTH_UNAVAILABLE)
+
+    def can_builder_auth(self) -> bool:
+        return self.builder_config is not None and self.builder_config.is_valid()
+
     def _get_client_mode(self):
         if self.signer is not None and self.creds is not None:
             return L2
         if self.signer is not None:
             return L1
         return L0
+
+    def _generate_builder_headers(self, request_args: RequestArgs, headers: dict):
+        """
+        Generates builder headers and attaches them to the L2 Header
+        """
+        if self.builder_config is not None:
+            builder_headers = self._get_builder_headers(
+                request_args.method,
+                request_args.request_path,
+                request_args.serialized_body,
+            )
+            if builder_headers is None:
+                return None
+            return enrich_l2_headers_with_builder_headers(headers, builder_headers)
+        return None
+
+    def _get_builder_headers(self, method: str, path: str, body: Optional[str] = None):
+        """
+        Generates builder headers for the given method, path, and body.
+
+        Args:
+            method (str): HTTP method.
+            path (str): Request path.
+            body (Optional[str]): Pre-serialized JSON string or None.
+
+        Returns:
+            dict or None: Builder headers as a dictionary, or None if not available.
+        """
+        headers = self.builder_config.generate_builder_headers(method, path, body)
+        if headers:
+            return headers.to_dict()
+        return None
 
     def get_notifications(self):
         """
@@ -702,12 +982,18 @@ class ClobClient:
         """
         self.assert_level_2_auth()
         body = params.orderIds
+        serialized = json.dumps(body, separators=(",", ":"), ensure_ascii=False)
         request_args = RequestArgs(
-            method="POST", request_path=ARE_ORDERS_SCORING, body=body
+            method="POST",
+            request_path=ARE_ORDERS_SCORING,
+            body=body,
+            serialized_body=serialized,
         )
         headers = create_level_2_headers(self.signer, self.creds, request_args)
         return post(
-            "{}{}".format(self.host, ARE_ORDERS_SCORING), headers=headers, data=body
+            "{}{}".format(self.host, ARE_ORDERS_SCORING),
+            headers=headers,
+            data=serialized,
         )
 
     def get_sampling_markets(self, next_cursor="MA=="):
@@ -753,6 +1039,29 @@ class ClobClient:
         Get the market's trades events by condition id
         """
         return get("{}{}{}".format(self.host, GET_MARKET_TRADES_EVENTS, condition_id))
+
+    def get_builder_trades(self, params: TradeParams = None, next_cursor="MA=="):
+        """
+        Get trades originated by the builder
+        """
+        self.assert_builder_auth()
+
+        request_args = RequestArgs(method="GET", request_path=GET_BUILDER_TRADES)
+        headers = self._get_builder_headers(
+            request_args.method, request_args.request_path, request_args.body
+        )
+
+        results = []
+        next_cursor = next_cursor if next_cursor is not None else "MA=="
+        while next_cursor != END_CURSOR:
+            url = add_query_trade_params(
+                "{}{}".format(self.host, GET_BUILDER_TRADES), params, next_cursor
+            )
+            response = get(url, headers=headers)
+            next_cursor = response["next_cursor"]
+            results += response["data"]
+
+        return results
 
     def calculate_market_price(
         self, token_id: str, side: str, amount: float, order_type: OrderType
