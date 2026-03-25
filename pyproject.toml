@@ -1,5 +1,5 @@
 [tool.poetry]
-name        = "py-clob-client"
+name        = "py-clob-client-felix"
 version     = "0.23.0"
 description = "Python client for the Polymarket CLOB"
 authors     = ["Felix"]
@@ -8,7 +8,6 @@ authors     = ["Felix"]
 python = ">=3.9.10,<4.0"
 eth-utils = ">=4.1.1"
 poly_eip712_structs = "0.0.1"
-pytest = "8.2.2"
 python-dotenv = "0.19.2"
 requests = "^2.29.0"
 websockets = ">=10"
