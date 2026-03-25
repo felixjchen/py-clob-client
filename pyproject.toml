@@ -11,4 +11,6 @@ poly_eip712_structs = "0.0.1"
 python-dotenv = "0.19.2"
 requests = "^2.29.0"
 websockets = ">=10"
+py-builder-signing-sdk = "0.0.2"
+httpx = {version = "0.27.0", extras = ["http2"]}
 py_order_utils = { git = "https://github.com/felixjchen/py-order-utils.git", rev = "948722c83a8c2957acd704518c2f050fe47da214" }
